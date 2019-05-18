@@ -1,4 +1,9 @@
 const SPECIAL_CHARS_REGEXP = /([:\-_]+(.))/g
+const camelCase = name => {
+  return name.replace(SPECIAL_CHARS_REGEXP, function (_, separator, letter, offset) {
+    return offset ? letter.toUpperCase() : letter
+  })
+}
 const getScrollBarWidth = () => {
   const div = document.createElement('div')
   div.style.width = '100px'
@@ -9,8 +14,9 @@ const getScrollBarWidth = () => {
   document.body.removeChild(div)
   return scrollBarWidth
 }
-const createViewerStyles = (zIndex = 2000) => {
-  return `
+const createStyles = (zIndex = 2000) => {
+  const targetStyleTag =
+  const styles = `
     body.img-preview--hideOverflow {
       overflow: hidden;
     }
@@ -60,13 +66,9 @@ const loadElement = (el) => {
   })
 }
 
-const camelCase = name => {
-  return name.replace(SPECIAL_CHARS_REGEXP, function (_, separator, letter, offset) {
-    return offset ? letter.toUpperCase() : letter
-  })
-}
 
-const getImageRatio = async img => {
+
+async function getImageRatio (img)  {
   const { clientWidth: viewportWidth, clientHeight: viewportHeight } = document.documentElement || document.body
   const PADDING_X_OFFSET = 20
   const PADDING_Y_OFFSET = 10
@@ -123,7 +125,7 @@ const getImageRatio = async img => {
   })
 }
 
-const setStyle = (el, styleName, value) => {
+function setStyle (el, styleName, value)  {
   if (typeof styleName === 'object') {
     for (const prop in styleName) {
       setStyle(el, prop, value)
@@ -132,7 +134,8 @@ const setStyle = (el, styleName, value) => {
     el.style[camelCase(styleName)] = value
   }
 }
-const getStyle = (el, styleName) => {
+
+function getStyle(el, styleName) {
   styleName = camelCase(styleName)
   if (styleName === 'float') {
     styleName = 'cssFloat'
@@ -145,19 +148,19 @@ const getStyle = (el, styleName) => {
   }
 }
 
-const getOffsetData = (el) => {
+function getOffsetData(el) {
   const { top, left } = el.getBoundingClientRect()
   return { top, left }
 }
 
-const createTagStyle = () => {
+function createTagStyle()  {
   const style = document.createElement('style')
-  style.innerHTML = createViewerStyles()
+  style.innerHTML = createStyles()
   document.head.appendChild(style)
   return style
 }
 
-const createDom = (elName, attrs, children) => {
+function createDom(elName, attrs, children)  {
   const root = document.createElement(elName || 'div')
   const toString = Object.prototype.toString
   if (toString.call(attrs).slice(8, -1).toLowerCase() !== 'object') {
@@ -183,6 +186,27 @@ const createDom = (elName, attrs, children) => {
   }
   return root
 }
+const getDom = document.querySelector.bind(document)
+
+class ImagePreviewer {
+  constructor (options) {
+    this.options = options
+    this.left = this.top = null
+    this.container = this.getContainer()
+    this.imageView = getDom('.image-view')
+    this.targetImg = getDom('.image-view-img')
+    this.domInner = getDom('.image-inner')
+  }
+  getContainer (src = '') {
+    return createDom('div', [
+      createDom('div', { class: 'image-view' }, [
+        createDom('div', { class: 'image-inner' }, [
+          createDom('img', { class: 'image-view-img', src })
+        ])
+      ])
+    ])
+  }
+}
 
 export default {
   inserted: async function (el, { value = {} }, vnode) {
@@ -193,76 +217,5 @@ export default {
       !src ||
       (value.max && width < value.max)
     ) return
-
-    let left = null
-    let top = null
-    const initStatus = (imageView) => {
-      document.body.classList.remove('img-preview--hideOverflow')
-      imageView.classList.remove('img-preview-needPaddingBottom')
-      setStyle(document.body, 'padding-right', '')
-    }
-    const getStyleAttribute = (left, top, ratio = 1) => {
-      return `
-        width: ${width}px;
-        transform: translate3d(${left}px, ${top}px, 0px)
-        scale3d(${ratio}, ${ratio}, 1);
-      `
-    }
-    const container = createDom('div', [
-      createDom('div', { class: 'image-view' }, [
-        createDom('div', { class: 'image-inner' }, [
-          createDom('img', { class: 'image-view-img', src })
-        ])
-      ])
-    ])
-    const imageView = container.querySelector('.image-view')
-    const targetImg = container.querySelector('.image-view-img')
-    const domInner = container.querySelector('.image-inner')
-    createTagStyle()
-
-    on(container, 'click', function containerEventHandler () {
-      if (imageView.classList.contains('is-shrinking')) return
-      imageView.classList.add('is-shrinking')
-      imageView.classList.remove('is-active')
-      const { scrollTop, scrollLeft } = domInner
-      targetImg.setAttribute('style',
-        getStyleAttribute(left + scrollLeft, top + scrollTop))
-    })
-
-    on(targetImg, 'transitionend', function targetImgEventHandler () {
-      if (!imageView.classList.contains('is-active')) {
-        document.body.removeChild(container)
-        imageView.classList.remove('is-shrinking')
-        setStyle(domInner, 'overflow', '')
-        initStatus(imageView)
-      } else {
-        setStyle(domInner, 'overflow', 'auto')
-      }
-    })
-
-    on(el, 'click', async function elEventHandler () {
-      const {
-        ratio,
-        offsetLeft,
-        offsetTop,
-        viewerHasPaddingBottom,
-        bodyComputedPaddingRight
-      } = await getImageRatio(el)
-
-      left = getOffsetData(el).left
-      top = getOffsetData(el).top
-      targetImg.setAttribute('style', getStyleAttribute(left, top))
-      if (viewerHasPaddingBottom) {
-        imageView.classList.add('img-preview-needPaddingBottom')
-      }
-      if (bodyComputedPaddingRight) {
-        document.body.classList.add('img-preview--hideOverflow')
-        setStyle(document.body, 'padding-right', bodyComputedPaddingRight)
-      }
-      document.body.appendChild(container)
-      await sleep()
-      imageView.classList.add('is-active')
-      targetImg.setAttribute('style', getStyleAttribute(offsetLeft, offsetTop, ratio))
-    })
   }
 }
